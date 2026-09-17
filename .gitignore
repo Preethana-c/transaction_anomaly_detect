@@ -1,0 +1,26 @@
+# data (large / not ours to redistribute)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# trained models
+models/*.pt
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# env / secrets
+.env
+*.env.local
+
+# os
+.DS_Store
+Thumbs.db
