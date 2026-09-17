@@ -88,3 +88,32 @@ def split_features_and_label(df: pd.DataFrame):
     X = df[FEATURE_COLUMNS].copy()
     y = df[LABEL_COLUMN].copy() if LABEL_COLUMN in df.columns else None
     return X, y
+
+
+def load_processed(path: Path = PROCESSED_DATA_PATH) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Processed data not found at {path}. Run notebooks/01_eda_preprocessing.py first."
+        )
+    return pd.read_csv(path)
+
+
+def train_test_split_df(df: pd.DataFrame, test_size: float = 0.2, random_state: int = 42):
+    """Deterministic, unstratified train/test split.
+
+    Deliberately NOT stratified on Class: stratifying would mean using the
+    label to shape the split, which is a small but real crack in the
+    "blind to labels" framing. A plain random split means fraud lands in
+    both train and test at roughly its natural base rate -- and fraud
+    rows are NOT removed from the training set, because without labels we
+    have no way to know which rows to remove. That's realistic: a
+    production model trains on whatever traffic arrives, fraud included.
+
+    random_state is fixed so every phase (training, evaluation, the
+    streaming replay in Phase 4) reconstructs the exact same split from
+    the same processed CSV without needing to persist duplicate files.
+    """
+    from sklearn.model_selection import train_test_split
+
+    train_df, test_df = train_test_split(df, test_size=test_size, random_state=random_state, shuffle=True)
+    return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
