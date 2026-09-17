@@ -1,0 +1,6 @@
+{
+  "threshold": 0.6805401412528638,
+  "strategy": "F1-optimal on held-out test set",
+  "precision_at_threshold": 0.4807692307692308,
+  "recall_at_threshold": 0.25510204081632654
+}

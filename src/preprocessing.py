@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -28,8 +29,8 @@ SCALER_PATH = PROJECT_ROOT / "models" / "scaler.joblib"
 
 LABEL_COLUMN = "Class"
 # V1-V28 arrive already PCA-transformed and scaled (per the Kaggle dataset
-# description) -- we leave them untouched. Only Time and Amount are raw.
-COLUMNS_TO_SCALE = ["Time", "Amount"]
+# description) -- we leave them untouched. Only Time and Amount are raw
+# (and Amount gets a log1p transform before scaling -- see `_log_amount`).
 PCA_COLUMNS = [f"V{i}" for i in range(1, 29)]
 # The exact, ordered feature set every model trains on and every live
 # transaction is scored on. Class is deliberately excluded.
@@ -45,10 +46,29 @@ def load_raw(path: Path = RAW_DATA_PATH) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _log_amount(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a 2-col frame [Time, Amount] with Amount log1p-transformed.
+
+    Amount is heavily right-skewed (most transactions are small, a long
+    tail runs up to five figures -- see the Phase 1 histogram). Fitting
+    StandardScaler on raw Amount lets that tail dominate: a handful of
+    large but perfectly legitimate purchases end up with huge Amount
+    z-scores, which in turn dominate a reconstruction-error-based anomaly
+    score and drown out the actual fraud signal in the other 29 features.
+    log1p compresses the tail before scaling, so "large but normal" and
+    "small but structurally weird" don't collapse into the same score
+    range for the wrong reason. This is a transform of Amount's own
+    distribution -- it never looks at Class.
+    """
+    out = df[["Time", "Amount"]].copy()
+    out["Amount"] = np.log1p(out["Amount"])
+    return out
+
+
 def fit_scaler(df: pd.DataFrame) -> StandardScaler:
-    """Fit a StandardScaler on Time and Amount only. No labels involved."""
+    """Fit a StandardScaler on Time and log1p(Amount). No labels involved."""
     scaler = StandardScaler()
-    scaler.fit(df[COLUMNS_TO_SCALE])
+    scaler.fit(_log_amount(df))
     return scaler
 
 
@@ -68,11 +88,13 @@ def load_scaler(path: Path = SCALER_PATH) -> StandardScaler:
 def apply_scaler(df: pd.DataFrame, scaler: StandardScaler) -> pd.DataFrame:
     """Return a copy of df with Time_scaled / Amount_scaled columns added.
 
-    Original Time/Amount columns are kept (useful for display in the demo);
-    models only ever read FEATURE_COLUMNS.
+    Amount_scaled is StandardScaler applied to log1p(Amount), not raw
+    Amount -- see `_log_amount`. Original Time/Amount columns are kept
+    (useful for display in the demo); models only ever read
+    FEATURE_COLUMNS.
     """
     out = df.copy()
-    scaled = scaler.transform(out[COLUMNS_TO_SCALE])
+    scaled = scaler.transform(_log_amount(out))
     out["Time_scaled"] = scaled[:, 0]
     out["Amount_scaled"] = scaled[:, 1]
     return out

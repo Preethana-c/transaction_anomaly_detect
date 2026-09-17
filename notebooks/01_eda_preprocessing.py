@@ -123,14 +123,23 @@ plt.show()
 
 # %% [markdown]
 # `Amount` is heavily right-skewed (mostly small transactions, a long tail
-# of large ones) -- another reason it needs standardizing, since raw
-# unscaled `Amount` would otherwise dominate distance-based scoring just
-# because of its larger numeric range.
+# of large ones, up to five figures) -- another reason it needs scaling,
+# since raw unscaled `Amount` would otherwise dominate distance-based
+# scoring just because of its larger numeric range.
+#
+# It needs more than plain standardizing, though: a handful of very large
+# (but perfectly legitimate) transactions in that tail turn into huge
+# z-scores under a plain `StandardScaler`, which -- as Phase 3's
+# evaluation caught -- ends up dominating the autoencoder's reconstruction
+# error and makes it flag big purchases as "anomalous" for the wrong
+# reason. So `Amount` gets `log1p`-transformed *before* standardizing,
+# compressing that tail. This is purely a transform of `Amount`'s own
+# distribution (see the skew above) -- it never touches `Class`.
 
 # %% [markdown]
 # ## 4. Scale `Time` and `Amount`
 #
-# We fit a `StandardScaler` on the two raw columns only. This fit uses
+# We fit a `StandardScaler` on `Time` and `log1p(Amount)`. This fit uses
 # feature values alone -- `Class` never enters this computation. The
 # fitted scaler is saved to `models/scaler.joblib` so the exact same
 # transform can be reapplied later, at inference time, in the FastAPI

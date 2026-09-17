@@ -148,7 +148,7 @@ model = Autoencoder().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss_fn = nn.MSELoss()
 
-N_EPOCHS = 15
+N_EPOCHS = 20  # loss plateaus by ~epoch 15-18; more epochs tested, no PR-AUC gain
 history = []
 
 t0 = time.time()
