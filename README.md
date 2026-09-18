@@ -4,7 +4,8 @@ A real-time, **unsupervised** fraud/anomaly detection system for credit
 card transactions, with a live-streaming demo (FastAPI + Supabase +
 Streamlit), not just a static notebook.
 
-> Status: Phase 1 (EDA & preprocessing) complete. See project phases below.
+> Status: Phases 1-4 complete (EDA, training, evaluation, streaming
+> backend). See project phases below.
 
 ## Why unsupervised?
 
@@ -73,15 +74,63 @@ pip install -r requirements.txt
 ## Project phases
 
 1. **EDA & preprocessing** -- load data, examine class imbalance, scale
-   `Time`/`Amount` only (`notebooks/01_eda_preprocessing.py`).
+   `Time`/`log1p(Amount)` (`notebooks/01_eda_preprocessing.py`).
 2. **Unsupervised training** -- Isolation Forest, One-Class SVM, PyTorch
-   autoencoder, all trained without labels.
+   autoencoder, all trained without labels (`notebooks/02_train_models.py`).
 3. **Evaluation** -- labels used only now: precision/recall/F1/PR-AUC per
-   model, threshold selection, model comparison and selection.
-4. **Streaming backend** -- FastAPI service replaying transactions live,
-   scoring with the trained autoencoder, logging to Supabase.
+   model, threshold selection, model comparison
+   (`notebooks/03_evaluation.py`). **Result: Isolation Forest was deployed
+   instead of the originally-planned autoencoder** -- it measurably
+   outperformed it (PR-AUC 0.23 vs 0.02) after a real, label-free
+   preprocessing bug (raw `Amount` outliers distorting the autoencoder's
+   reconstruction error) was found and fixed. The autoencoder stays
+   trained in the repo as the comparison baseline. See the notebook for
+   the full writeup.
+4. **Streaming backend** -- FastAPI service (`api/`) replaying a curated
+   mix of real test-set transactions (every fraud row + a random sample
+   of legitimate ones) with a short delay, scoring each live with the
+   deployed Isolation Forest, and logging to Supabase. Also injects
+   synthetic obvious-anomaly transactions periodically. See "Running the
+   backend locally" and "Supabase setup" below.
 5. **Dashboard** -- Streamlit live feed + model comparison + plain-language
-   explanation of reconstruction error.
+   explanation of anomaly scoring.
 6. **Deployment** -- Render (backend) + Streamlit Community Cloud (dashboard).
 
 (Sections below are filled in as each phase lands.)
+
+## Supabase setup (for Phase 4/5)
+
+The backend logs every streamed transaction + anomaly score to a
+Supabase (Postgres) table. Without Supabase configured, it falls back to
+an in-memory log automatically -- fine for local development, but the
+deployed demo needs a real project so the dashboard (a separate service)
+can read what the backend writes.
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Open the SQL Editor and run [`api/schema.sql`](api/schema.sql) -- it
+   creates the `transactions` table, indexes, and a public-read RLS policy.
+3. Go to Project Settings -> API and copy:
+   - **Project URL** -> `SUPABASE_URL`
+   - **service_role secret key** -> `SUPABASE_KEY` (backend only --
+     bypasses RLS, never expose it to the dashboard/browser)
+   - **anon public key** -> used by the dashboard in Phase 5 instead
+4. Copy `.env.example` to `.env` in the repo root and fill in the values.
+
+## Running the backend locally
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env      # fill in Supabase values, or leave blank for in-memory storage
+uvicorn api.main:app --reload
+```
+
+Endpoints (interactive docs at `http://127.0.0.1:8000/docs`):
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | status + which storage backend is active |
+| `POST /stream/start` | start the simulated live feed (`{"delay_seconds": 0.3}`) |
+| `POST /stream/stop` | stop it |
+| `GET /stream/status` | running state + live counts |
+| `GET /transactions/recent?limit=50&flagged_only=false` | recent scored transactions |
+| `GET /models/comparison` | Phase 3's model comparison table, for the dashboard |
