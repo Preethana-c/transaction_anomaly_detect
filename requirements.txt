@@ -17,3 +17,5 @@ httpx
 # --- Phase 5: dashboard ---
 streamlit
 plotly
+requests
+streamlit-autorefresh

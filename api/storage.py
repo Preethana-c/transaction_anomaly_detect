@@ -51,6 +51,13 @@ class SupabaseStorage:
         self._table = config.SUPABASE_TABLE
 
     def insert(self, row: dict[str, Any]) -> None:
+        # supabase-py's client is synchronous -- this blocks the asyncio
+        # event loop for one network round-trip per transaction. At this
+        # demo's scale (delay_seconds >= 0.05s between transactions,
+        # typically 0.3s) that's a small, known tradeoff, not the
+        # multi-second stall the CSV-loading bug in api/streamer.py was.
+        # A production version streaming much faster would want an async
+        # Supabase client or a batched/background writer instead.
         self._client.table(self._table).insert(row).execute()
 
     def recent(self, limit: int = 50, flagged_only: bool = False) -> list[Any]:

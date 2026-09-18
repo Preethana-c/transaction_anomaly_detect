@@ -113,8 +113,12 @@ can read what the backend writes.
    - **Project URL** -> `SUPABASE_URL`
    - **service_role secret key** -> `SUPABASE_KEY` (backend only --
      bypasses RLS, never expose it to the dashboard/browser)
-   - **anon public key** -> used by the dashboard in Phase 5 instead
 4. Copy `.env.example` to `.env` in the repo root and fill in the values.
+
+The dashboard never talks to Supabase directly -- it only calls the
+FastAPI backend's HTTP endpoints (see below), which is what actually
+reads/writes the database. So the dashboard needs no Supabase
+credentials at all, just the backend's URL.
 
 ## Running the backend locally
 
@@ -134,3 +138,26 @@ Endpoints (interactive docs at `http://127.0.0.1:8000/docs`):
 | `GET /stream/status` | running state + live counts |
 | `GET /transactions/recent?limit=50&flagged_only=false` | recent scored transactions |
 | `GET /models/comparison` | Phase 3's model comparison table, for the dashboard |
+| `GET /models/scores` | per-transaction test-set scores for all 3 models, for the dashboard's PR curves |
+
+## Running the dashboard locally
+
+With the backend already running (above):
+
+```bash
+export API_BASE_URL=http://127.0.0.1:8000   # PowerShell: $env:API_BASE_URL = "http://127.0.0.1:8000"
+streamlit run dashboard/app.py
+```
+
+Three tabs:
+
+- **Live Feed** -- start/stop the simulated stream, watch transactions and
+  anomaly scores arrive in real time, flagged ones highlighted.
+- **Model Comparison** -- the Phase 3 evaluation table, interactive PR
+  curves for all three models, and the threshold tradeoff table --
+  the rigor behind why Isolation Forest was deployed instead of the
+  originally-planned autoencoder.
+- **How This Works** -- a plain-language explanation of unsupervised
+  anomaly detection and Isolation Forest, plus an interactive threshold
+  slider so a non-technical viewer can feel the precision/recall tradeoff
+  themselves rather than just reading about it.

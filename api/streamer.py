@@ -34,7 +34,7 @@ from api.synthetic import make_synthetic_transaction  # noqa: E402
 from src import preprocessing as prep  # noqa: E402
 
 
-def build_demo_stream() -> pd.DataFrame:
+def _build_demo_stream() -> pd.DataFrame:
     df = prep.load_processed()
     _, test_df = prep.train_test_split_df(df, test_size=0.2, random_state=42)
 
@@ -44,6 +44,25 @@ def build_demo_stream() -> pd.DataFrame:
     )
     demo_df = pd.concat([fraud_rows, legit_rows]).sample(frac=1, random_state=config.DEMO_SEED)
     return demo_df.reset_index(drop=True)
+
+
+_demo_stream_df: pd.DataFrame | None = None
+
+
+def get_demo_stream() -> pd.DataFrame:
+    """Cached, built once per process.
+
+    Reading and reshuffling the ~155MB processed CSV takes a couple of
+    seconds. Doing that synchronously inside `_run()` blocked asyncio's
+    single-threaded event loop long enough that even the HTTP response to
+    the *same* `/stream/start` request timed out client-side -- caught
+    empirically while testing the dashboard. Building it once (warmed up
+    at API startup, see api/main.py) means `_run()` never blocks on it.
+    """
+    global _demo_stream_df
+    if _demo_stream_df is None:
+        _demo_stream_df = _build_demo_stream()
+    return _demo_stream_df
 
 
 class StreamState:
@@ -91,7 +110,7 @@ class StreamState:
         return self.status()
 
     async def _run(self, delay_seconds: float):
-        demo_df = build_demo_stream()
+        demo_df = get_demo_stream()
         scorer = get_scorer()
         storage = get_storage()
         rng = np.random.RandomState(config.DEMO_SEED)

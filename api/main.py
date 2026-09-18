@@ -25,7 +25,7 @@ from api import config  # noqa: E402
 from api.schemas import StreamStartRequest, StreamStatus, Transaction  # noqa: E402
 from api.scorer import get_scorer  # noqa: E402
 from api.storage import get_storage  # noqa: E402
-from api.streamer import stream_state  # noqa: E402
+from api.streamer import get_demo_stream, stream_state  # noqa: E402
 
 app = FastAPI(title="Transaction Anomaly Detector API")
 
@@ -35,6 +35,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _warm_up():
+    """Pre-load the model and demo-stream data before serving traffic.
+
+    Both are blocking, synchronous work (joblib.load, a ~155MB CSV read).
+    Doing them here -- once, before the event loop is serving requests --
+    instead of lazily inside the first /stream/start call is what fixes
+    the blocking-event-loop bug described in api/streamer.py.
+    """
+    try:
+        get_scorer()
+        get_demo_stream()
+    except FileNotFoundError as e:
+        # Don't crash startup -- /stream/start will raise a clear 503
+        # instead. Lets the API still serve /health while models are
+        # missing (e.g. first-time setup before running the notebooks).
+        print(f"[startup] model artifacts not ready yet: {e}")
 
 
 @app.get("/health")
@@ -84,4 +103,19 @@ def model_comparison():
     path = PROJECT_ROOT / "data" / "processed" / "model_comparison.csv"
     if not path.exists():
         raise HTTPException(status_code=404, detail="model_comparison.csv not found -- run notebooks/03_evaluation.py")
+    return pd.read_csv(path).to_dict(orient="records")
+
+
+@app.get("/models/scores")
+def model_scores():
+    """Per-transaction test-set scores for all three models, plus Class.
+
+    Also a static Phase 3 artifact, exposed the same way as
+    /models/comparison -- lets the dashboard draw its own PR curves and
+    let a viewer interactively move the threshold, without needing
+    filesystem access to the notebooks that produced it.
+    """
+    path = PROJECT_ROOT / "data" / "processed" / "test_scores.csv"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="test_scores.csv not found -- run notebooks/02_train_models.py")
     return pd.read_csv(path).to_dict(orient="records")
