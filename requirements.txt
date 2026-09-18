@@ -1,3 +1,8 @@
+# Full local-dev environment: notebooks + backend + dashboard.
+# Deploying just one piece? Use the slim requirements next to it instead
+# -- api/requirements.txt (Render) or dashboard/requirements.txt
+# (Streamlit Community Cloud) -- neither needs torch/matplotlib/etc.
+
 # --- Phase 1-3: data science / modeling ---
 pandas
 numpy
@@ -6,13 +11,13 @@ torch
 matplotlib
 seaborn
 jupytext
+joblib
 
-# --- Phase 4: backend (added later, kept here so the file stays complete) ---
+# --- Phase 4: backend ---
 fastapi
 uvicorn[standard]
 supabase
 python-dotenv
-httpx
 
 # --- Phase 5: dashboard ---
 streamlit

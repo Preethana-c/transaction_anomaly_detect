@@ -1,0 +1,22 @@
+# Render "Blueprint" -- lets you deploy the backend with New + -> Blueprint
+# in the Render dashboard instead of configuring a Web Service by hand.
+# See README.md "Deploying the backend (Render)" for the manual steps
+# (equivalent, if you'd rather not use a Blueprint) and for what to set
+# SUPABASE_URL / SUPABASE_KEY to.
+services:
+  - type: web
+    name: transaction-anomaly-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r api/requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_TABLE
+        value: transactions
+      - key: ALLOWED_ORIGINS
+        value: "*"

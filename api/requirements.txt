@@ -1,0 +1,12 @@
+# Slim requirements for deploying just the FastAPI backend (e.g. on
+# Render) -- excludes training-only deps (torch, matplotlib, jupytext)
+# that the live API never imports. See requirements.txt at the repo
+# root for the full local-dev environment (notebooks + backend + dashboard).
+fastapi
+uvicorn[standard]
+supabase
+python-dotenv
+pandas
+numpy
+scikit-learn
+joblib

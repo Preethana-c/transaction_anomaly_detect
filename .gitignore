@@ -1,14 +1,17 @@
-# data (large / not ours to redistribute)
+# raw dataset -- not ours to redistribute, download it yourself (see README)
 data/raw/*
 !data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
 
-# trained models
-models/*.pt
-models/*.pkl
-models/*.joblib
-!models/.gitkeep
+# the full processed dataset is ~155MB -- too large to commit, and
+# nothing at serve time needs it (api/streamer.py reads the small
+# precomputed data/processed/demo_stream.csv instead). Everything else
+# under data/processed/ (model_comparison.csv, test_scores.csv,
+# demo_stream.csv) is small and IS committed.
+data/processed/creditcard_processed.csv
+
+# trained models -- all small in this project (largest is ~1.8MB), so
+# they're committed directly rather than excluded; this is what lets
+# the deployed backend serve without retraining anything.
 
 # python
 __pycache__/

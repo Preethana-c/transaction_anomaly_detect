@@ -1,0 +1,12 @@
+# Slim requirements for deploying just the Streamlit dashboard (e.g. on
+# Streamlit Community Cloud) -- it never imports src/ or torch, it only
+# talks to the FastAPI backend over HTTP. Streamlit Cloud auto-detects
+# this file since it lives alongside dashboard/app.py.
+streamlit
+plotly
+requests
+streamlit-autorefresh
+pandas
+numpy
+scikit-learn
+python-dotenv

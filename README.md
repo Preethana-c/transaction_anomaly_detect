@@ -4,8 +4,8 @@ A real-time, **unsupervised** fraud/anomaly detection system for credit
 card transactions, with a live-streaming demo (FastAPI + Supabase +
 Streamlit), not just a static notebook.
 
-> Status: Phases 1-4 complete (EDA, training, evaluation, streaming
-> backend). See project phases below.
+> Status: all 6 phases complete (EDA, training, evaluation, streaming
+> backend, dashboard, deployment-ready). See project phases below.
 
 ## Why unsupervised?
 
@@ -48,18 +48,24 @@ Either way, verify you end up with:
 data/raw/creditcard.csv   (~150 MB, 284,807 rows)
 ```
 
-`data/raw/` and `data/processed/` are gitignored -- the raw dataset is
-never committed to this repo.
+`data/raw/` is gitignored -- the raw dataset is never committed to this
+repo. Most of `data/processed/` and all of `models/` ARE committed
+(they're small -- a few hundred KB to ~2MB each); only the full
+`creditcard_processed.csv` (~155MB) is excluded. See "Deploying the
+backend" below for why that split matters.
 
 ## Project structure
 
 ```
 src/          reusable pipeline code (preprocessing, shared by notebooks and API)
-notebooks/    EDA and model training (Phase 1-3), jupytext percent-format .py
-api/          FastAPI streaming backend (Phase 4)
-dashboard/    Streamlit live dashboard (Phase 5)
-data/         raw/processed data (gitignored)
-models/       fitted scaler + trained models (gitignored)
+notebooks/    EDA, model training, evaluation, deploy-prep (Phase 1-3, 6)
+api/          FastAPI streaming backend (Phase 4) + api/requirements.txt (slim, for Render)
+dashboard/    Streamlit live dashboard (Phase 5) + dashboard/requirements.txt (slim, for Streamlit Cloud)
+data/raw/     the Kaggle CSV (gitignored -- you download it, see above)
+data/processed/  committed: model_comparison.csv, test_scores.csv, demo_stream.csv
+                 gitignored: creditcard_processed.csv (~155MB, regenerate via notebook 01)
+models/       fitted scaler + all trained models + deployment thresholds (committed)
+render.yaml   Render Blueprint config for one-click backend deploy
 ```
 
 ## Setup
@@ -92,11 +98,15 @@ pip install -r requirements.txt
    deployed Isolation Forest, and logging to Supabase. Also injects
    synthetic obvious-anomaly transactions periodically. See "Running the
    backend locally" and "Supabase setup" below.
-5. **Dashboard** -- Streamlit live feed + model comparison + plain-language
-   explanation of anomaly scoring.
-6. **Deployment** -- Render (backend) + Streamlit Community Cloud (dashboard).
-
-(Sections below are filled in as each phase lands.)
+5. **Dashboard** (`dashboard/`) -- Streamlit live feed + model comparison +
+   plain-language explanation of anomaly scoring, with an interactive
+   threshold slider. Talks only to the backend over HTTP.
+6. **Deployment** -- `notebooks/04_build_demo_stream.py` precomputes the
+   small demo-stream artifact the live backend needs (so it never
+   depends on the full 155MB dataset at serve time); `api/requirements.txt`,
+   `dashboard/requirements.txt`, and `render.yaml` are the slim,
+   deployment-specific configs. See "Deploying the backend" and
+   "Deploying the dashboard" below for exact steps.
 
 ## Supabase setup (for Phase 4/5)
 
@@ -161,3 +171,64 @@ Three tabs:
   anomaly detection and Isolation Forest, plus an interactive threshold
   slider so a non-technical viewer can feel the precision/recall tradeoff
   themselves rather than just reading about it.
+
+## Deploying the backend (Render)
+
+The backend is deployed from **`api/requirements.txt`**, not the root
+one -- it excludes training-only dependencies (torch, matplotlib,
+jupytext) the live API never imports, which keeps the build fast and
+small on Render's free tier.
+
+**What Render needs that isn't generated at deploy time:** the trained
+model files under `models/` (scaler, Isolation Forest, threshold) and
+`data/processed/demo_stream.csv` are all committed to this repo
+specifically so the deployed backend can serve without retraining
+anything or needing the ~155MB full dataset -- see `.gitignore` for why
+only `creditcard_processed.csv` itself is excluded. If you've changed
+the model, re-run `notebooks/02`, `03`, and `04` locally and commit the
+updated files before deploying.
+
+**Option A -- Blueprint (recommended):** in the Render dashboard, **New
++ -> Blueprint**, point it at this repo. It reads [`render.yaml`](render.yaml)
+and creates the service for you; you'll be prompted for `SUPABASE_URL`
+and `SUPABASE_KEY` (the two `sync: false` vars in that file).
+
+**Option B -- manual Web Service:** New + -> Web Service, point it at
+this repo, then set:
+
+| Setting | Value |
+|---|---|
+| Runtime | Python 3 |
+| Build Command | `pip install -r api/requirements.txt` |
+| Start Command | `uvicorn api.main:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/health` |
+
+Then add environment variables `SUPABASE_URL`, `SUPABASE_KEY`,
+`SUPABASE_TABLE=transactions`, `ALLOWED_ORIGINS` (set this to your
+deployed Streamlit app's URL once you have it, e.g.
+`https://your-app.streamlit.app`).
+
+Once it's live, note the Render URL (e.g.
+`https://transaction-anomaly-api.onrender.com`) -- the dashboard needs it next.
+
+> Free-tier Render web services spin down after inactivity; the first
+> request after idling takes ~30-60s to wake up. That's expected, not a bug.
+
+## Deploying the dashboard (Streamlit Community Cloud)
+
+1. Go to [share.streamlit.io](https://share.streamlit.io), **New app**,
+   point it at this repo.
+2. **Main file path**: `dashboard/app.py`. Streamlit Cloud auto-detects
+   `dashboard/requirements.txt` since it lives alongside the app file --
+   you don't need to point at it manually.
+3. Under **Advanced settings -> Secrets**, add:
+   ```toml
+   API_BASE_URL = "https://transaction-anomaly-api.onrender.com"
+   ```
+   (your actual Render URL from the previous step).
+4. Deploy. Once it's live, go back to the Render backend's environment
+   variables and set `ALLOWED_ORIGINS` to this app's URL (CORS needs the
+   dashboard's real origin, not `*`, once both are public).
+
+That's the full loop: dashboard (Streamlit Cloud) -> backend (Render) ->
+Supabase (Postgres) -> back to the dashboard.

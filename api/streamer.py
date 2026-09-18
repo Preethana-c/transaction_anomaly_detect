@@ -10,6 +10,13 @@ a fixed seed. It's still exclusively real, held-out test-set transactions
 (save for the explicitly-requested synthetic injections below) -- just a
 curated mix sized for a demo that finishes in a few minutes instead of
 hours.
+
+That mix is precomputed once by notebooks/04_build_demo_stream.py and
+saved to data/processed/demo_stream.csv (small enough to commit to git,
+unlike the ~155MB full processed dataset). This module just loads that
+file -- it doesn't depend on the full dataset or re-derive the split at
+serve time at all, which matters for the deployed backend: Render never
+even has creditcard_processed.csv.
 """
 
 from __future__ import annotations
@@ -33,35 +40,30 @@ from api.storage import get_storage  # noqa: E402
 from api.synthetic import make_synthetic_transaction  # noqa: E402
 from src import preprocessing as prep  # noqa: E402
 
-
-def _build_demo_stream() -> pd.DataFrame:
-    df = prep.load_processed()
-    _, test_df = prep.train_test_split_df(df, test_size=0.2, random_state=42)
-
-    fraud_rows = test_df[test_df["Class"] == 1]
-    legit_rows = test_df[test_df["Class"] == 0].sample(
-        n=min(config.DEMO_N_LEGIT, len(test_df)), random_state=config.DEMO_SEED
-    )
-    demo_df = pd.concat([fraud_rows, legit_rows]).sample(frac=1, random_state=config.DEMO_SEED)
-    return demo_df.reset_index(drop=True)
-
+DEMO_STREAM_PATH = PROJECT_ROOT / "data" / "processed" / "demo_stream.csv"
 
 _demo_stream_df: pd.DataFrame | None = None
 
 
 def get_demo_stream() -> pd.DataFrame:
-    """Cached, built once per process.
+    """Cached, loaded once per process.
 
-    Reading and reshuffling the ~155MB processed CSV takes a couple of
-    seconds. Doing that synchronously inside `_run()` blocked asyncio's
-    single-threaded event loop long enough that even the HTTP response to
-    the *same* `/stream/start` request timed out client-side -- caught
-    empirically while testing the dashboard. Building it once (warmed up
-    at API startup, see api/main.py) means `_run()` never blocks on it.
+    Loading a several-hundred-KB CSV is fast, but doing it synchronously
+    inside `_run()` -- as an earlier version of this function did, when it
+    built the mix from the full ~155MB processed dataset on every call --
+    blocked asyncio's single-threaded event loop long enough that even the
+    HTTP response to that same `/stream/start` request timed out
+    client-side (caught empirically while testing the dashboard). Loading
+    it once, warmed up at API startup (see api/main.py), means `_run()`
+    never blocks on it.
     """
     global _demo_stream_df
     if _demo_stream_df is None:
-        _demo_stream_df = _build_demo_stream()
+        if not DEMO_STREAM_PATH.exists():
+            raise FileNotFoundError(
+                f"{DEMO_STREAM_PATH} not found -- run notebooks/04_build_demo_stream.py first."
+            )
+        _demo_stream_df = pd.read_csv(DEMO_STREAM_PATH)
     return _demo_stream_df
 
 
