@@ -30,3 +30,13 @@ Thumbs.db
 
 # claude code local state
 .claude/
+
+# streamlit secrets (API URL etc. for deployed dashboard)
+.streamlit/secrets.toml
+
+# personal interview notes -- not part of the public project
+INTERVIEW_PREP.md
+
+# editor / tooling
+.vscode/
+.idea/

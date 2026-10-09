@@ -232,3 +232,7 @@ Once it's live, note the Render URL (e.g.
 
 That's the full loop: dashboard (Streamlit Cloud) -> backend (Render) ->
 Supabase (Postgres) -> back to the dashboard.
+
+## License
+
+MIT -- see [LICENSE](LICENSE). The Kaggle dataset is not included and has its own terms.
